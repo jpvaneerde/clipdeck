@@ -1,0 +1,18 @@
+# Drop this into jpvaneerde/argocd alongside your other Applications.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: clipdeck
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jpvaneerde/clipdeck.git
+    targetRevision: main
+    path: deploy/kubernetes
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: clipdeck
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]

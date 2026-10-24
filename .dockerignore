@@ -1,0 +1,8 @@
+target
+data
+library
+web/node_modules
+web/dist
+web/public/engine.wasm
+.git
+*.wav

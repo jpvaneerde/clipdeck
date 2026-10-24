@@ -1,0 +1,10 @@
+[package]
+name = "clipdeck-model"
+description = "Project file format shared by the server (offline export) and mirrored by the web UI."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+clipdeck-engine = { path = "../engine" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -1,0 +1,7 @@
+[package]
+name = "clipdeck-engine"
+description = "Real-time audio engine for Clipdeck: clip launching, synths, drum rack, sampler, effects. No dependencies so it compiles cleanly to wasm32."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

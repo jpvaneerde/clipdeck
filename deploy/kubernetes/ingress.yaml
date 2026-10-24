@@ -1,0 +1,24 @@
+# Adjust ingressClassName, the TLS secret and annotations to match how you
+# publish your other intherapy.eu services. Uploads can be large, hence the
+# body-size annotation (ingress-nginx; other controllers ignore it).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: clipdeck
+  namespace: clipdeck
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "512m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  # ingressClassName: nginx
+  rules:
+    - host: clipdeck.intherapy.eu
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: clipdeck, port: { name: http } }
+  # tls:
+  #   - hosts: [clipdeck.intherapy.eu]
+  #     secretName: clipdeck-tls

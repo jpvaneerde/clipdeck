@@ -1,0 +1,13 @@
+# Holds the generated sample library (~1.7 GB), your uploads and packs,
+# and the SQLite database with projects. Uses the cluster's default
+# StorageClass; set storageClassName if you want a specific one.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clipdeck-data
+  namespace: clipdeck
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi

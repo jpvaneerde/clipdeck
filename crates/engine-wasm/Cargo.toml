@@ -1,0 +1,10 @@
+[package]
+name = "clipdeck-engine-wasm"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+clipdeck-engine = { path = "../engine" }

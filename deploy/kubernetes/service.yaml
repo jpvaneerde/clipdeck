@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clipdeck
+  namespace: clipdeck
+spec:
+  selector: { app.kubernetes.io/name: clipdeck }
+  ports:
+    - { name: http, port: 80, targetPort: http }

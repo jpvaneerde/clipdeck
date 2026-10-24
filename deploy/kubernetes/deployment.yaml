@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clipdeck
+  namespace: clipdeck
+  labels: { app.kubernetes.io/name: clipdeck }
+spec:
+  replicas: 1                # SQLite on a ReadWriteOnce volume: one writer.
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: clipdeck }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: clipdeck }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      initContainers:
+        # Generates the sample library on first start (about 1–3 minutes,
+        # ~2,800 samples). Later starts see the completion marker and skip.
+        - name: library
+          image: ghcr.io/jpvaneerde/clipdeck:latest
+          command: ["clipdeck-samplegen", "--out", "/data/library", "--scale", "1.0"]
+          resources:
+            requests: { cpu: 500m, memory: 256Mi }
+            limits: { memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      containers:
+        - name: clipdeck
+          image: ghcr.io/jpvaneerde/clipdeck:latest
+          ports:
+            - { name: http, containerPort: 8080 }
+          env:
+            - { name: RUST_LOG, value: "info" }
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            # Exports render on the server; a few minutes of audio needs a few hundred MB.
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 2Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: clipdeck-data }

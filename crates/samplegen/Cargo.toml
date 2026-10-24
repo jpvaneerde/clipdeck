@@ -1,0 +1,16 @@
+[package]
+name = "clipdeck-samplegen"
+description = "Synthesizes Clipdeck's royalty-free sample library: one-shots, construction-kit loops, hooks, vocals and FX."
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "clipdeck-samplegen"
+path = "src/main.rs"
+
+[dependencies]
+clipdeck-engine = { path = "../engine" }
+hound = "3.5"
+rayon = "1.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
