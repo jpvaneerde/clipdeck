@@ -20,7 +20,7 @@ index: server
 	CLIPDECK_DATA=$(DATA) ./target/release/clipdeck-server index
 
 dev: wasm server
-	CLIPDECK_DATA=$(DATA) CLIPDECK_WEB=web/dist ./target/release/clipdeck-server & \
+	CLIPDECK_AUTH=disabled CLIPDECK_DATA=$(DATA) CLIPDECK_WEB=web/dist ./target/release/clipdeck-server & \
 	cd web && npm install && npm run dev
 
 test:

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { edit } from "../state/actions";
-import { api } from "../state/api";
+import { api, type ProjectInfo, type UserInfo } from "../state/api";
 import { emptyProject } from "../state/defaults";
-import { store, useStore } from "../state/store";
+import { lastProjectKey, store, useStore } from "../state/store";
 import type { Project, Section } from "../state/types";
 import { Icon } from "./controls";
 import { toast } from "./hooks";
@@ -136,7 +136,8 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
 
 export function ProjectsDialog({ onClose, onNewDemo }: { onClose: () => void; onNewDemo: () => void }) {
   const currentId = useStore((s) => s.projectId);
-  const [list, setList] = useState<{ id: string; name: string; updated: number }[] | null>(null);
+  const me = useStore((s) => s.me);
+  const [list, setList] = useState<ProjectInfo[] | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const refresh = () => api.projects().then(setList).catch((e) => toast(e.message, true));
   useEffect(() => {
@@ -147,7 +148,7 @@ export function ProjectsDialog({ onClose, onNewDemo }: { onClose: () => void; on
     try {
       const p = await api.project(id);
       store.load(p, id);
-      localStorage.setItem("clipdeck.project", id);
+      localStorage.setItem(lastProjectKey(), id);
       onClose();
     } catch (e) {
       toast((e as Error).message, true);
@@ -172,7 +173,7 @@ export function ProjectsDialog({ onClose, onNewDemo }: { onClose: () => void; on
           className="btn"
           onClick={() => {
             store.load(emptyProject(), null);
-            localStorage.removeItem("clipdeck.project");
+            localStorage.removeItem(lastProjectKey());
             onClose();
           }}
         >
@@ -204,6 +205,7 @@ export function ProjectsDialog({ onClose, onNewDemo }: { onClose: () => void; on
               <div>{p.name}</div>
               <div className="muted mono" style={{ fontSize: 11 }}>
                 {new Date(p.updated * 1000).toLocaleString()}
+                {p.ownerId !== me?.id && <span> · {p.ownerName ?? "no owner"}</span>}
               </div>
             </div>
             <div className="row">
@@ -237,6 +239,62 @@ export function ProjectsDialog({ onClose, onNewDemo }: { onClose: () => void; on
                 </>
               )}
             </div>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+// ------------------------------------------------------------ users (admin)
+
+const ago = (t: number) => {
+  const s = Date.now() / 1000 - t;
+  if (s < 90) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return new Date(t * 1000).toLocaleDateString();
+};
+
+export function UsersDialog({ onClose }: { onClose: () => void }) {
+  const me = useStore((s) => s.me);
+  const [users, setUsers] = useState<UserInfo[] | null>(null);
+  const refresh = () => api.users().then(setUsers).catch((e) => toast(e.message, true));
+  useEffect(() => {
+    refresh();
+  }, []);
+  const toggle = async (u: UserInfo) => {
+    try {
+      await api.setBlocked(u.id, !u.blocked);
+      toast(u.blocked ? `${u.name} can sign in again` : `${u.name} is blocked and signed out`);
+      refresh();
+    } catch (e) {
+      toast((e as Error).message, true);
+    }
+  };
+  return (
+    <Modal title="Users" onClose={onClose}>
+      <p>
+        People appear here after their first sign-in. Roles come from Entra ID: assign <b>Admin</b> or <b>User</b> under Enterprise applications › Clipdeck › Users and groups. Role changes apply at the person's next sign-in. Blocking signs someone out of Clipdeck right away, whatever their role.
+      </p>
+      <div className="project-list">
+        {users === null && <p>Loading…</p>}
+        {users?.map((u) => (
+          <div key={u.id} className="project-item" style={u.blocked ? { opacity: 0.6 } : undefined}>
+            <div style={{ minWidth: 0 }}>
+              <div>
+                {u.name} <span className={`chip ${u.role === "admin" ? "on" : ""}`} style={{ fontSize: 10, padding: "0 6px" }}>{u.role === "none" ? "no role" : u.role}</span>
+                {u.blocked && <span className="chip" style={{ fontSize: 10, padding: "0 6px", marginLeft: 4, borderColor: "var(--rec)" }}>blocked</span>}
+              </div>
+              <div className="muted mono" style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {u.email} · last sign-in {ago(u.lastLogin)} · {u.projects} project{u.projects === 1 ? "" : "s"} · {u.uploads} upload{u.uploads === 1 ? "" : "s"}
+              </div>
+            </div>
+            {u.id !== me?.id && (
+              <button className="btn" style={u.blocked ? undefined : { borderColor: "var(--rec)" }} onClick={() => toggle(u)}>
+                {u.blocked ? "Unblock" : "Block"}
+              </button>
+            )}
           </div>
         ))}
       </div>

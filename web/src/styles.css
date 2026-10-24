@@ -362,3 +362,10 @@ button { cursor: pointer; }
 }
 .wavebig { width: 100%; display: block; }
 .col .mixer-row, .scene-col .mixer-row { position: sticky; bottom: 0; z-index: 2; }
+
+/* user menu */
+.avatar { width: 20px; height: 20px; border-radius: 50%; background: var(--panel-3); color: var(--text); display: inline-grid; place-items: center; font-size: 10px; font-weight: 600; }
+.menu { position: absolute; right: 0; top: 34px; z-index: 40; min-width: 200px; background: var(--panel-3); border: 1px solid var(--line); border-radius: 6px; padding: 4px; display: grid; gap: 2px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+.menu .btn { justify-content: flex-start; width: 100%; }
+.menu-head { padding: 6px 10px 8px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+.menu form { margin: 0; }

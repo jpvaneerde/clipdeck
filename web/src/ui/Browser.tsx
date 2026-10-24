@@ -26,6 +26,7 @@ const PAGE = 60;
 
 export function Browser() {
   const bpm = useStore((s) => s.project.bpm);
+  const isAdmin = useStore((s) => s.me?.role === "admin");
   const [text, setText] = useState("");
   const q = useDebounced(text, 200);
   const [category, setCategory] = useState("");
@@ -56,7 +57,8 @@ export function Browser() {
       bpm: matchTempo ? bpm : undefined,
       bpmTolerance: matchTempo ? 4 : undefined,
       favorites: favorites || undefined,
-      source: source || undefined,
+      source: source === "mine" ? "user" : source || undefined,
+      mine: source === "mine" || undefined,
       kit: kit || undefined,
     }),
     [q, category, genre, key, compatible, matchTempo, bpm, favorites, source, kit],
@@ -139,9 +141,9 @@ export function Browser() {
     toast(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}…`);
     try {
       const r = await api.upload(files);
-      if (r.items.length) toast(`Added ${r.items.length} sample${r.items.length > 1 ? "s" : ""} to My samples`);
+      if (r.items.length) toast(`Added ${r.items.length} sample${r.items.length > 1 ? "s" : ""} to My uploads`);
       for (const e of r.errors) toast(e, true);
-      setSource("user");
+      setSource("mine");
       setReload((x) => x + 1);
     } catch (e) {
       toast(`Upload failed: ${(e as Error).message}`, true);
@@ -218,9 +220,10 @@ export function Browser() {
             <input id="f-fav" type="checkbox" checked={favorites} onChange={(e) => setFavorites(e.target.checked)} /> Favorites
           </label>
           <select id="f-source" aria-label="Source" value={source} onChange={(e) => setSource(e.target.value)}>
-            <option value="">Library + mine</option>
+            <option value="">Library + uploads</option>
             <option value="generated">Library</option>
-            <option value="user">My samples</option>
+            <option value="user">All uploads</option>
+            <option value="mine">My uploads</option>
           </select>
         </div>
       </div>
@@ -286,6 +289,8 @@ export function Browser() {
             Choose files
             <input id="upload-input" type="file" multiple accept="audio/*" hidden onChange={(e) => onDropFiles([...(e.target.files ?? [])])} />
           </label>
+          {isAdmin && (
+            <>
           {" · "}
           <button
             className="btn ghost"
@@ -298,6 +303,8 @@ export function Browser() {
           >
             Rescan folder
           </button>
+            </>
+          )}
         </div>
       </div>
     </aside>

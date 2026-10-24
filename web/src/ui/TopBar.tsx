@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { engine } from "../audio/host";
 import { connectMidi } from "../audio/live";
 import { edit, transport } from "../state/actions";
@@ -20,7 +20,47 @@ function Position() {
   return <span ref={ref} className="mono beat-display" aria-label="Position (bar.beat.sixteenth)">1.1.1</span>;
 }
 
-export function TopBar({ onProjects, onExport, saveState }: { onProjects: () => void; onExport: () => void; saveState: string }) {
+function UserMenu({ onUsers }: { onUsers: () => void }) {
+  const me = useStore((s) => s.me);
+  const [open, setOpen] = useState(false);
+  if (!me) return null;
+  const initials = me.name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <div style={{ position: "relative" }}>
+      <button className="btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title={`${me.name} (${me.email})`}>
+        <span className="avatar" aria-hidden="true">{initials}</span>
+        <span className="hide-narrow">{me.name.split(" ")[0]}</span>
+        {me.role === "admin" && <span className="chip on" style={{ fontSize: 10, padding: "0 6px" }}>admin</span>}
+      </button>
+      {open && (
+        <div className="menu" role="menu" onMouseLeave={() => setOpen(false)}>
+          <div className="menu-head">
+            <div>{me.name}</div>
+            <div className="muted mono" style={{ fontSize: 11 }}>{me.email}</div>
+          </div>
+          {me.role === "admin" && (
+            <button className="btn ghost" role="menuitem" onClick={() => { setOpen(false); onUsers(); }}>
+              Users
+            </button>
+          )}
+          {/* Sign-out is a POST so other sites can't sign you out with a link. */}
+          <form method="post" action="/auth/logout">
+            <button className="btn ghost" role="menuitem" type="submit" style={{ width: "100%" }}>
+              Sign out
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TopBar({ onProjects, onExport, onUsers, saveState }: { onProjects: () => void; onExport: () => void; onUsers: () => void; saveState: string }) {
   const name = useStore((s) => s.project.name);
   const bpm = useStore((s) => s.project.bpm);
   const swing = useStore((s) => s.project.swing);
@@ -124,6 +164,7 @@ export function TopBar({ onProjects, onExport, saveState }: { onProjects: () => 
         <button className="btn primary" onClick={onExport}>
           {Icon.export} Export
         </button>
+        <UserMenu onUsers={onUsers} />
       </div>
     </header>
   );

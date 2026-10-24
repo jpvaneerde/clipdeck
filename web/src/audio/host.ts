@@ -3,7 +3,7 @@
 
 import workletUrl from "./worklet.ts?worker&url";
 import { MAX_TRACKS, STATE_HEADER, STATE_TRACK_STRIDE } from "./ids";
-import { api } from "../state/api";
+import { api, signIn } from "../state/api";
 import type { Note } from "../state/types";
 
 export interface Transport {
@@ -137,6 +137,7 @@ class EngineHost {
     const p = (async () => {
       await this.init();
       const res = await fetch(api.audioUrl(id));
+      if (res.status === 401) signIn();
       if (!res.ok) throw new Error(`${id}: ${res.status}`);
       const buf = await this.ctx!.decodeAudioData(await res.arrayBuffer());
       const ch = Math.min(2, buf.numberOfChannels);

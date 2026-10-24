@@ -1,0 +1,18 @@
+[
+  {
+    "allowedMemberTypes": ["User"],
+    "description": "Full access to Clipdeck, plus managing users, rescanning the sample folder, editing library metadata and deleting anyone's uploads.",
+    "displayName": "Clipdeck Admin",
+    "id": "8f6c2a1e-4b7d-4c3a-9e2f-1d5b6a7c8e90",
+    "isEnabled": true,
+    "value": "Admin"
+  },
+  {
+    "allowedMemberTypes": ["User"],
+    "description": "Make music in Clipdeck: own projects, favorites and uploads.",
+    "displayName": "Clipdeck User",
+    "id": "3a9d7e5b-2c1f-4e8a-b6d4-0f9e8c7b6a51",
+    "isEnabled": true,
+    "value": "User"
+  }
+]

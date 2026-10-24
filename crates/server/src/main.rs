@@ -9,16 +9,23 @@
 //!   CLIPDECK_LIBRARY  generated library (default $CLIPDECK_DATA/library)
 //!   CLIPDECK_WEB      built web app (default ./web/dist)
 //!   PORT              listen port (default 8080)
+//!   Sign-in (Entra ID): PUBLIC_URL, OIDC_TENANT_ID, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET;
+//!   see auth.rs. CLIPDECK_AUTH=disabled turns sign-in off for local development.
 
 mod api;
 mod audio;
+mod auth;
+#[cfg(test)]
+mod auth_flow_test;
 mod db;
 mod render;
 
 use anyhow::{Context, Result};
 use axum::http::{header, HeaderValue};
+use axum::Router;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::compression::predicate::{NotForContentType, Predicate, SizeAbove};
 use tower_http::compression::CompressionLayer;
@@ -103,24 +110,40 @@ async fn serve(cfg: Config) -> Result<()> {
         tracing::info!("{} samples available", db_bg.count());
     });
 
-    let index = cfg.web.join("index.html");
-    let assets = ServiceBuilder::new()
-        .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=31536000, immutable")))
-        .service(ServeDir::new(cfg.web.join("assets")));
-    let spa = ServiceBuilder::new()
-        .layer(SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("no-cache")))
-        .service(ServeDir::new(&cfg.web).fallback(ServeFile::new(index)));
-
-    // Compress text and wasm; audio is already dense and needs byte ranges.
-    let compress = CompressionLayer::new().compress_when(SizeAbove::new(1024).and(NotForContentType::new("audio/")));
-
-    let app = api::router(db).nest_service("/assets", assets).fallback_service(spa).layer(compress).layer(TraceLayer::new_for_http());
+    let auth = Arc::new(auth::from_env(&db)?);
+    if let auth::Auth::Oidc(o) = auth.as_ref() {
+        o.warm_up().await;
+    }
+    let app = build_app(db, auth, &cfg.web);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("listening on http://{addr} (web: {}, library: {})", cfg.web.display(), cfg.library.display());
     axum::serve(listener, app).with_graceful_shutdown(shutdown()).await?;
     Ok(())
+}
+
+/// The whole HTTP app: sign-in routes, then everything else behind sign-in.
+fn build_app(db: db::Shared, auth: auth::SharedAuth, web: &std::path::Path) -> Router {
+    let index = web.join("index.html");
+    let assets = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::overriding(header::CACHE_CONTROL, HeaderValue::from_static("private, max-age=31536000, immutable")))
+        .service(ServeDir::new(web.join("assets")));
+    let spa = ServiceBuilder::new()
+        .layer(SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("no-cache")))
+        .service(ServeDir::new(web).fallback(ServeFile::new(index)));
+
+    // Compress text and wasm; audio is already dense and needs byte ranges.
+    let compress = CompressionLayer::new().compress_when(SizeAbove::new(1024).and(NotForContentType::new("audio/")));
+
+    let state = auth::AuthState { db: db.clone(), auth };
+    api::router(db)
+        .nest_service("/assets", assets)
+        .fallback_service(spa)
+        .merge(auth::routes(state.clone()))
+        .layer(axum::middleware::from_fn_with_state(state, auth::require_user))
+        .layer(compress)
+        .layer(TraceLayer::new_for_http())
 }
 
 async fn shutdown() {

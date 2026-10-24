@@ -5,10 +5,10 @@ import { startSync } from "./audio/sync";
 import { ensureScenes, setClip, transport } from "./state/actions";
 import { api } from "./state/api";
 import { demoProject, type DemoKit } from "./state/defaults";
-import { store, useStore } from "./state/store";
+import { lastProjectKey, store, useStore } from "./state/store";
 import { Browser } from "./ui/Browser";
 import { Detail } from "./ui/Detail";
-import { ExportDialog, ProjectsDialog, StartOverlay } from "./ui/Dialogs";
+import { ExportDialog, ProjectsDialog, StartOverlay, UsersDialog } from "./ui/Dialogs";
 import { useEngineStatus, useToasts } from "./ui/hooks";
 import { Session } from "./ui/Session";
 import { TopBar } from "./ui/TopBar";
@@ -54,7 +54,7 @@ export default function App() {
   const projectId = useStore((s) => s.projectId);
   const dirty = useStore((s) => s.dirty);
   const toasts = useToasts();
-  const [dialog, setDialog] = useState<null | "export" | "projects">(null);
+  const [dialog, setDialog] = useState<null | "export" | "projects" | "users">(null);
   const [saveState, setSaveState] = useState("");
   const started = useRef(false);
 
@@ -62,7 +62,7 @@ export default function App() {
     engine.cmd("stop");
     const kit = await loadKit(random);
     store.load(demoProject(kit), null);
-    localStorage.removeItem("clipdeck.project");
+    localStorage.removeItem(lastProjectKey());
   }, []);
 
   // Boot: engine, sync, and the last project (or a starter session).
@@ -72,13 +72,18 @@ export default function App() {
     engine.init().catch(() => undefined);
     startSync();
     (async () => {
-      const id = localStorage.getItem("clipdeck.project");
+      try {
+        store.set({ me: await api.me() });
+      } catch {
+        return; // not signed in: api already redirected to sign-in
+      }
+      const id = localStorage.getItem(lastProjectKey());
       if (id) {
         try {
           store.load(await api.project(id), id);
           return;
         } catch {
-          localStorage.removeItem("clipdeck.project");
+          localStorage.removeItem(lastProjectKey());
         }
       }
       await newDemo(false);
@@ -97,7 +102,7 @@ export default function App() {
         if (id) await api.saveProject(id, p);
         else {
           id = (await api.createProject(p)).id;
-          localStorage.setItem("clipdeck.project", id);
+          localStorage.setItem(lastProjectKey(), id);
         }
         store.set({ projectId: id, dirty: store.get().project !== p, savedAt: Date.now() });
         setSaveState("Saved");
@@ -194,7 +199,7 @@ export default function App() {
 
   return (
     <div className={`app ${browserOpen ? "" : "no-browser"}`}>
-      <TopBar onProjects={() => setDialog("projects")} onExport={() => setDialog("export")} saveState={saveState} />
+      <TopBar onProjects={() => setDialog("projects")} onExport={() => setDialog("export")} onUsers={() => setDialog("users")} saveState={saveState} />
       <Browser />
       <main className="main">
         <Session />
@@ -202,6 +207,7 @@ export default function App() {
       <Detail />
       {dialog === "export" && <ExportDialog onClose={() => setDialog(null)} />}
       {dialog === "projects" && <ProjectsDialog onClose={() => setDialog(null)} onNewDemo={() => newDemo(true)} />}
+      {dialog === "users" && <UsersDialog onClose={() => setDialog(null)} />}
       {!running && <StartOverlay status={status} error={error} onStart={() => engine.resume()} />}
       <div className="toast-stack" aria-live="polite">
         {toasts.map((t) => (

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { emptyProject } from "./defaults";
+import type { Me } from "./api";
 import type { Project } from "./types";
 
 export interface Selection {
@@ -17,6 +18,7 @@ export interface AppState {
   metronome: boolean;
   browserOpen: boolean;
   octave: number;
+  me: Me | null;
 }
 
 type Listener = () => void;
@@ -113,6 +115,7 @@ export const store = new Store({
   metronome: false,
   browserOpen: typeof window === "undefined" || window.innerWidth > 860,
   octave: 4,
+  me: null,
 });
 
 export function useStore<T>(selector: (s: AppState) => T): T {
@@ -127,4 +130,9 @@ export function updateTrack(p: Project, ti: number, fn: (t: Project["tracks"][nu
   const tracks = p.tracks.slice();
   tracks[ti] = fn(t);
   return { ...p, tracks };
+}
+
+/** The last open project is remembered per signed-in user. */
+export function lastProjectKey() {
+  return `clipdeck.project.${store.get().me?.id ?? "anon"}`;
 }

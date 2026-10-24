@@ -25,6 +25,10 @@ the server by the same engine, so the file sounds exactly like the session.
   (with relative major/minor), tempo near the project, kit, favorites, and your own uploads.
   Click to preview, drag onto the grid or a drum pad, double-click to add.
 - **Projects**: autosave to the server, a project list, undo/redo, save/open as JSON files.
+- **Sign-in with Entra ID**: OpenID Connect against your tenant. Access comes from two app roles,
+  **Admin** and **User**, assigned in Entra; Clipdeck provisions each person on their first sign-in
+  and refreshes their name and role at every sign-in. Projects, favorites and uploads belong to
+  their owner; admins also manage users and the sample folder.
 - **Export**: arrange scenes into a song (scene + bars per section) and render 16/24-bit WAV at
   44.1/48/96 kHz.
 
@@ -75,7 +79,7 @@ Needs Rust (stable) and Node 22.
 ```sh
 make wasm                 # engine → web/public/engine.wasm
 make library SCALE=0.1    # a quick 350-sample library in ./data/library (drop SCALE for the full one)
-make dev                  # server on :8080, Vite with hot reload on http://localhost:5173
+make dev                  # server on :8080 (sign-in off), Vite with hot reload on http://localhost:5173
 ```
 
 `make test` runs the Rust tests (engine timing, quantized launches, tempo sync, mixer bounds, ABI,
@@ -86,19 +90,67 @@ database, file-name parsing) and the TypeScript type check.
 1. Push this repo to `github.com/jpvaneerde/clipdeck`. The workflow in `.github/workflows/build.yml`
    tests, then builds `ghcr.io/jpvaneerde/clipdeck:latest` (amd64) on every push to `main`.
 2. Make the GHCR package public, or add an image pull secret to the namespace.
-3. Edit `deploy/kubernetes/ingress.yaml` to match your ingress class and TLS (it uses
-   `clipdeck.intherapy.eu`).
-4. Copy `deploy/argocd/clipdeck.yaml` into your Argo CD repo.
+3. Register the app in Entra ID and create the `clipdeck-oidc` secret (next section).
+4. Deploy the manifests. The live ones are in the Argo CD repo (`jpvaneerde/argocd`, `apps/clipdeck`);
+   `deploy/kubernetes` here is a generic copy.
 
 On first start an init container generates the library onto the 10 Gi volume (a minute or two);
 later starts skip it. The server indexes it in the background and is ready immediately.
 
-**There is no login.** Anyone who can reach the URL can upload samples and change projects, so put it
-behind your SSO or forward-auth (for example oauth2-proxy with Entra ID) or keep it on the LAN.
-
 Environment: `CLIPDECK_DATA` (default `/data`), `CLIPDECK_LIBRARY` (default `$CLIPDECK_DATA/library`),
-`CLIPDECK_WEB`, `PORT`. CLI: `clipdeck-server index [--force]`,
+`CLIPDECK_WEB`, `PORT`, and the sign-in settings below. CLI: `clipdeck-server index [--force]`,
 `clipdeck-server render project.json out.wav [--bars N]`.
+
+## Sign-in with Entra ID
+
+Clipdeck is a confidential OpenID Connect client (authorization code flow with PKCE). It checks the
+ID token's signature against your tenant's keys, plus issuer, audience, expiry, nonce and tenant.
+Sessions are random tokens stored server-side as hashes, in an HttpOnly, SameSite=Lax cookie
+(12 hours by default). The server refuses to start without sign-in settings, so it can't
+accidentally run open.
+
+**Roles.** The app registration defines two app roles: `Admin` and `User` (`deploy/entra/app-roles.json`).
+
+| | User | Admin |
+|---|---|---|
+| Make music, export, upload samples | ✓ | ✓ |
+| Own projects, favorites, delete own uploads | ✓ | ✓ |
+| See and open everyone's projects | | ✓ |
+| Users list, block/unblock people | | ✓ |
+| Rescan the sample folder, edit library metadata, delete any upload | | ✓ |
+
+**Provisioning.** There is nothing to set up in Clipdeck. At each sign-in it reads the `roles` claim,
+creates the user on first sign-in (keyed by tenant + object ID) and updates their name, email and
+role. People without either role are turned away and not created. Removing someone's role ends
+their access at their next sign-in; to cut access at once, block them in Clipdeck's Users dialog
+(this also ends their sessions). With *Assignment required* switched on (the setup script does
+this), Entra itself stops unassigned people before they reach Clipdeck. Assigning a group requires
+Entra ID P1 or higher; otherwise assign users directly.
+
+**Setup.** With the Azure CLI signed in to your tenant:
+
+```sh
+./deploy/entra/create-app.sh https://clipdeck.jplay.cloud
+```
+
+It creates the app registration (single tenant, redirect URIs `/auth/callback` and
+`/auth/signed-out`, the two roles), turns on assignment required, creates a client secret and
+prints the `kubectl` command for the `clipdeck-oidc` secret. Then assign people under
+*Enterprise applications › Clipdeck › Users and groups*.
+
+To do it by hand in the Entra admin center instead: register a single-tenant app with a **Web**
+platform and both redirect URIs; under *App roles* add `Admin` and `User` (allowed member types:
+Users/Groups); create a client secret; in the enterprise application set *Assignment required* to
+Yes and assign people.
+
+| Variable | |
+|---|---|
+| `PUBLIC_URL` | e.g. `https://clipdeck.jplay.cloud`; redirect URIs are derived from it |
+| `OIDC_TENANT_ID` | directory (tenant) ID |
+| `OIDC_CLIENT_ID` | application (client) ID |
+| `OIDC_CLIENT_SECRET` | client secret value |
+| `SESSION_HOURS` | optional, default 12 |
+| `CLIPDECK_AUTH=disabled` | local development only: no sign-in, you are a local admin |
 
 ## How the audio works
 
@@ -117,11 +169,14 @@ at about 11× real time natively, so a laptop has plenty of headroom.
 
 | Method | Path | |
 |---|---|---|
-| GET | `/api/samples?q=&category=&genre=&key=&compatible=&bpm=&kit=&favorites=&source=&limit=&offset=` | search |
+| GET | `/api/samples?q=&category=&genre=&key=&compatible=&bpm=&kit=&favorites=&mine=&source=&limit=&offset=` | search |
 | GET | `/api/facets` (same filters) | counts per category, genre, key, kit |
 | GET | `/api/audio/{id}` | audio file, with byte ranges |
-| GET/PATCH/DELETE | `/api/sample?id=` | details, edit metadata, delete an upload |
-| POST | `/api/favorite`, `/api/upload` (multipart), `/api/rescan` | |
+| GET/PATCH/DELETE | `/api/sample?id=` | details; edit metadata (admin); delete an upload (owner or admin) |
+| POST | `/api/favorite`, `/api/upload` (multipart), `/api/rescan` (admin) | |
+| GET | `/api/me` | the signed-in user and role |
+| GET | `/api/admin/users`; PATCH `/api/admin/users/{id}` `{"blocked": true}` | admin |
+| GET | `/auth/login?return=`; `/auth/callback`; POST `/auth/logout` | sign-in |
 | GET/POST | `/api/projects`; GET/PUT/DELETE `/api/projects/{id}` | |
 | POST | `/api/render?bits=&sampleRate=&tail=` (project JSON body) | WAV |
 | GET | `/api/status`, `/healthz` | |
@@ -132,3 +187,4 @@ at about 11× real time natively, so a laptop has plenty of headroom.
 - No audio recording from a microphone and no arrangement timeline editing beyond the export's
   scene chain.
 - One replica (SQLite on a ReadWriteOnce volume).
+- Role changes made in Entra apply when the person next signs in (sessions last 12 hours by default).

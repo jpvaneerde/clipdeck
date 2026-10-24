@@ -41,6 +41,10 @@ spec:
             - { name: http, containerPort: 8080 }
           env:
             - { name: RUST_LOG, value: "info" }
+            - { name: PUBLIC_URL, value: "https://clipdeck.jplay.cloud" }
+          # OIDC_TENANT_ID, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET: see deploy/entra/create-app.sh
+          envFrom:
+            - secretRef: { name: clipdeck-oidc }
           readinessProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 10

@@ -15,6 +15,10 @@ members = [
 version = "0.1.0"
 edition = "2021"
 
+# Optimize dependencies in debug builds too (RSA key generation in tests, DSP).
+[profile.dev.package."*"]
+opt-level = 2
+
 [profile.release]
 opt-level = 3
 lto = "thin"
